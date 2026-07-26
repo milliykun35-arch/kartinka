@@ -10,8 +10,7 @@ export default async function ProductsPage() {
     const [productsRes, settingsRes] = await Promise.all([
       supabase
         .from("products")
-        .select("*, product_variants(*)")
-        .eq("is_active", true)
+        .select("*")
         .order("created_at", { ascending: false }),
       supabase.from("store_settings").select("*").limit(1).single(),
     ])

@@ -13,8 +13,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("products")
-      .select("*, product_variants(*), categories(name_uz, name_ru)")
-      .eq("is_active", true)
+      .select("*")
 
     if (search) {
       query = query.or(

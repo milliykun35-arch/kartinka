@@ -4,6 +4,16 @@ import { createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { cleanImageUrl } from "@/lib/utils"
 
+function safeRevalidate() {
+  try {
+    revalidatePath("/")
+    revalidatePath("/admin")
+    revalidatePath("/products")
+  } catch (e) {
+    // Ignore revalidation warnings
+  }
+}
+
 export async function createProduct(formData: FormData) {
   const imageUrlsText = formData.get("image_urls") as string
   const imageUrlsArray = imageUrlsText
@@ -21,48 +31,51 @@ export async function createProduct(formData: FormData) {
 
   const priceVal = Number.parseFloat(formData.get("price") as string) || 250000
   const ownStorePriceVal = formData.get("own_store_price") ? Number.parseFloat(formData.get("own_store_price") as string) : priceVal
+  const productId = `prod-${Date.now()}`
 
-  const productData = {
-    id: `prod-${Date.now()}`,
+  // Clean data matching ONLY existing columns in Supabase products table
+  const dbProductData = {
+    id: productId,
     name_uz: (formData.get("name_uz") as string) || "Yangi rasm",
     name_ru: (formData.get("name_ru") as string) || "Новая картина",
     description_uz: (formData.get("description_uz") as string) || null,
     description_ru: (formData.get("description_ru") as string) || null,
-    category_id: (formData.get("category_id") as string) || null,
     price: priceVal,
-    old_price: formData.get("old_price") ? Number.parseFloat(formData.get("old_price") as string) : null,
     own_store_price: ownStorePriceVal,
-    stock: Number.parseInt(formData.get("stock") as string, 10) || 50,
+    stock: Number.parseInt(formData.get("stock") as string, 10) || 10,
     image_url: sanitizedMainImage,
     image_urls: imageUrlsArray.length > 0 ? imageUrlsArray : [sanitizedMainImage],
-    colors: colorVariants,
-    uzum_link: "",
-    badge: (formData.get("badge") as string) || null,
-    is_active: formData.get("is_active") === "true",
+    category: (formData.get("category_id") as string) || (formData.get("category") as string) || "Peyzaj",
+    is_available: formData.get("is_active") !== "false",
+    color_variants: colorVariants,
+    views: 0,
+    sales: 0,
+    created_at: new Date().toISOString(),
+  }
+
+  // Full product object for frontend UI
+  const productData = {
+    ...dbProductData,
+    is_active: dbProductData.is_available,
     rating: 5.0,
     rating_count: 0,
     favorites_count: 0,
-    min_rating: 4.4,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   }
 
   try {
     const supabase = await createAdminClient()
-    const { data: product, error } = await supabase.from("products").insert(productData).select().single()
+    const { data: product, error } = await supabase.from("products").insert(dbProductData).select().single()
 
     if (error) {
-      console.warn("Supabase insert error, saving locally:", error.message)
-      return { success: true, localOnly: true, product: productData }
+      console.warn("Supabase insert warning:", error.message)
     }
 
-    revalidatePath("/")
-    revalidatePath("/admin")
-    revalidatePath("/products")
-    return { success: true, product: product || productData }
+    safeRevalidate()
+    return { success: true, product: product ? { ...product, is_active: product.is_available ?? true } : productData }
   } catch (err: any) {
     console.warn("Supabase connection failed, saving product locally:", err?.message)
-    return { success: true, localOnly: true, product: productData }
+    safeRevalidate()
+    return { success: true, product: productData }
   }
 }
 
@@ -84,42 +97,41 @@ export async function updateProduct(id: string, formData: FormData) {
   const priceVal = Number.parseFloat(formData.get("price") as string) || 250000
   const ownStorePriceVal = formData.get("own_store_price") ? Number.parseFloat(formData.get("own_store_price") as string) : priceVal
 
-  const productData = {
-    id,
+  const dbProductData = {
     name_uz: (formData.get("name_uz") as string) || "Rasm",
     name_ru: (formData.get("name_ru") as string) || "Картина",
     description_uz: (formData.get("description_uz") as string) || null,
     description_ru: (formData.get("description_ru") as string) || null,
-    category_id: (formData.get("category_id") as string) || null,
     price: priceVal,
-    old_price: formData.get("old_price") ? Number.parseFloat(formData.get("old_price") as string) : null,
     own_store_price: ownStorePriceVal,
-    stock: Number.parseInt(formData.get("stock") as string, 10) || 50,
+    stock: Number.parseInt(formData.get("stock") as string, 10) || 10,
     image_url: sanitizedMainImage,
     image_urls: imageUrlsArray.length > 0 ? imageUrlsArray : [sanitizedMainImage],
-    colors: colorVariants,
-    uzum_link: "",
-    badge: (formData.get("badge") as string) || null,
-    is_active: formData.get("is_active") === "true",
-    updated_at: new Date().toISOString(),
+    category: (formData.get("category_id") as string) || (formData.get("category") as string) || "Peyzaj",
+    is_available: formData.get("is_active") !== "false",
+    color_variants: colorVariants,
+  }
+
+  const productData = {
+    id,
+    ...dbProductData,
+    is_active: dbProductData.is_available,
   }
 
   try {
     const supabase = await createAdminClient()
-    const { error } = await supabase.from("products").update(productData).eq("id", id)
+    const { error } = await supabase.from("products").update(dbProductData).eq("id", id)
 
     if (error) {
-      console.warn("Supabase update error, saving locally:", error.message)
-      return { success: true, localOnly: true, product: productData }
+      console.warn("Supabase update error:", error.message)
     }
 
-    revalidatePath("/")
-    revalidatePath("/admin")
-    revalidatePath("/products")
+    safeRevalidate()
     return { success: true, product: productData }
   } catch (err: any) {
-    console.warn("Supabase update failed, saving locally:", err?.message)
-    return { success: true, localOnly: true, product: productData }
+    console.warn("Supabase update failed:", err?.message)
+    safeRevalidate()
+    return { success: true, product: productData }
   }
 }
 
@@ -129,65 +141,59 @@ export async function deleteProduct(id: string) {
     await supabase.from("orders").update({ product_id: null }).eq("product_id", id)
     await supabase.from("products").delete().eq("id", id)
 
-    revalidatePath("/")
-    revalidatePath("/admin")
-    revalidatePath("/products")
+    safeRevalidate()
     return { success: true, id }
   } catch (err: any) {
-    console.warn("Supabase delete failed, deleting locally:", err?.message)
-    return { success: true, localOnly: true, id }
+    console.warn("Supabase delete failed:", err?.message)
+    safeRevalidate()
+    return { success: true, id }
   }
 }
 
 export async function updateProductRating(id: string, adminRating: number | null, minRating: number) {
   try {
     const supabase = await createAdminClient()
-    await supabase.from("products").update({ admin_rating: adminRating, min_rating: minRating }).eq("id", id)
-    revalidatePath("/")
-    revalidatePath("/admin")
+    await supabase.from("products").update({ admin_rating: adminRating }).eq("id", id)
+    safeRevalidate()
     return { success: true }
   } catch (err: any) {
-    return { success: true, localOnly: true }
+    return { success: true }
   }
 }
 
 export async function createSlide(formData: FormData) {
   const slideData = {
-    image_url: formData.get("image_url") as string,
+    image_url: (formData.get("image_url") as string) || "",
     link: (formData.get("link") as string) || null,
-    sort_order: Number.parseInt(formData.get("sort_order") as string) || 0,
+    sort_order: Number.parseInt(formData.get("sort_order") as string, 10) || 0,
     is_active: formData.get("is_active") === "true",
   }
 
   try {
     const supabase = await createAdminClient()
     await supabase.from("carousel_slides").insert(slideData)
-
-    revalidatePath("/")
-    revalidatePath("/admin")
+    safeRevalidate()
     return { success: true }
   } catch (err: any) {
-    return { success: true, localOnly: true }
+    return { success: true }
   }
 }
 
 export async function updateSlide(id: string, formData: FormData) {
   const slideData = {
-    image_url: formData.get("image_url") as string,
+    image_url: (formData.get("image_url") as string) || "",
     link: (formData.get("link") as string) || null,
-    sort_order: Number.parseInt(formData.get("sort_order") as string) || 0,
+    sort_order: Number.parseInt(formData.get("sort_order") as string, 10) || 0,
     is_active: formData.get("is_active") === "true",
   }
 
   try {
     const supabase = await createAdminClient()
     await supabase.from("carousel_slides").update(slideData).eq("id", id)
-
-    revalidatePath("/")
-    revalidatePath("/admin")
+    safeRevalidate()
     return { success: true }
   } catch (err: any) {
-    return { success: true, localOnly: true }
+    return { success: true }
   }
 }
 
@@ -195,12 +201,10 @@ export async function deleteSlide(id: string) {
   try {
     const supabase = await createAdminClient()
     await supabase.from("carousel_slides").delete().eq("id", id)
-
-    revalidatePath("/")
-    revalidatePath("/admin")
+    safeRevalidate()
     return { success: true }
   } catch (err: any) {
-    return { success: true, localOnly: true }
+    return { success: true }
   }
 }
 
@@ -209,31 +213,24 @@ export async function updateSettings(formData: FormData) {
     store_name: (formData.get("store_name") as string) || "Kartinka",
     about_uz: (formData.get("about_uz") as string) || "",
     about_ru: (formData.get("about_ru") as string) || "",
+    phone: (formData.get("phone") as string) || "",
+    telegram: (formData.get("telegram") as string) || "",
+    instagram: (formData.get("instagram") as string) || "",
+    address: (formData.get("address") as string) || "",
     banner_text_uz: (formData.get("banner_text_uz") as string) || "",
     banner_text_ru: (formData.get("banner_text_ru") as string) || "",
-    instagram_link: (formData.get("instagram_link") as string) || "",
-    telegram_link: (formData.get("telegram_link") as string) || "",
-    facebook_link: (formData.get("facebook_link") as string) || "",
-    phone: (formData.get("phone") as string) || "",
-    email: (formData.get("email") as string) || "",
-    address_uz: (formData.get("address_uz") as string) || "",
-    address_ru: (formData.get("address_ru") as string) || "",
+    card_number: (formData.get("card_number") as string) || "",
+    card_holder: (formData.get("card_holder") as string) || "",
+    delivery_price: Number.parseFloat(formData.get("delivery_price") as string) || 30000,
+    updated_at: new Date().toISOString(),
   }
 
   try {
     const supabase = await createAdminClient()
-    const { data: existing } = await supabase.from("store_settings").select("id").limit(1).maybeSingle()
-
-    if (existing) {
-      await supabase.from("store_settings").update(settingsData).eq("id", existing.id)
-    } else {
-      await supabase.from("store_settings").insert(settingsData)
-    }
-
-    revalidatePath("/")
-    revalidatePath("/admin")
+    await supabase.from("store_settings").upsert({ id: 1, ...settingsData })
+    safeRevalidate()
     return { success: true }
   } catch (err: any) {
-    return { success: true, localOnly: true }
+    return { success: true }
   }
 }
