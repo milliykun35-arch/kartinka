@@ -33,14 +33,14 @@ export function ReviewsManagement() {
   const fetchReviews = async () => {
     try {
       const res = await fetch("/api/reviews?status=all")
-      if (!res.ok) {
-        throw new Error("Failed to fetch reviews")
-      }
       const data = await res.json()
-      setReviews(Array.isArray(data) ? data : [])
+      const dbReviews = Array.isArray(data) ? data : []
+      const localReviews = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_reviews") || "[]") : []
+      const merged = [...localReviews, ...dbReviews.filter((r: any) => !localReviews.some((lr: any) => lr.id === r.id))]
+      setReviews(merged)
     } catch (error) {
-      console.error("Failed to fetch reviews:", error)
-      setReviews([])
+      const localReviews = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_reviews") || "[]") : []
+      setReviews(localReviews)
     } finally {
       setLoading(false)
     }

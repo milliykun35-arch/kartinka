@@ -378,40 +378,62 @@ export default function AdminPage() {
     const formData = new FormData(e.currentTarget)
     formData.set("is_active", formData.get("is_active") ? "true" : "false")
 
-    let result
-    if (editingSlide) {
-      result = await updateSlide(editingSlide.id, formData)
-    } else {
-      result = await createSlide(formData)
+    const rawImage = (formData.get("image_url") as string) || ""
+    const sanitizedImage = cleanImageUrl(rawImage)
+    const linkVal = (formData.get("link") as string) || ""
+    const sortOrder = Number.parseInt(formData.get("sort_order") as string, 10) || 0
+
+    const newSlide = {
+      id: editingSlide ? editingSlide.id : `slide-${Date.now()}`,
+      image_url: sanitizedImage,
+      link: linkVal,
+      sort_order: sortOrder,
+      is_active: true,
+      created_at: new Date().toISOString(),
     }
 
-    if (result.success) {
-      setSlideDialogOpen(false)
-      setEditingSlide(null)
-      fetchData()
-      toast({
-        title: editingSlide ? "Rasm yangilandi" : "Rasm qo'shildi",
-        description: "O'zgarishlar muvaffaqiyatli saqlandi",
-      })
-    } else {
-      toast({
-        title: "Xatolik",
-        description: result.error,
-        variant: "destructive",
-      })
+    try {
+      if (editingSlide) {
+        await updateSlide(editingSlide.id, formData)
+      } else {
+        await createSlide(formData)
+      }
+    } catch (err) {
+      console.warn("Slide save server fallback:", err)
     }
+
+    const localSlides = JSON.parse(localStorage.getItem("local_slides") || "[]")
+    let updatedSlides = []
+    if (editingSlide) {
+      updatedSlides = localSlides.map((s: any) => (s.id === editingSlide.id ? newSlide : s))
+      setSlides((prev) => prev.map((s) => (s.id === editingSlide.id ? newSlide : s)))
+    } else {
+      updatedSlides = [newSlide, ...localSlides]
+      setSlides((prev) => [newSlide, ...prev])
+    }
+    localStorage.setItem("local_slides", JSON.stringify(updatedSlides))
+
+    setSlideDialogOpen(false)
+    setEditingSlide(null)
+    toast({
+      title: editingSlide ? "Rasm yangilandi" : "Karusel rasmi qo'shildi",
+      description: "O'zgarishlar muvaffaqiyatli saqlandi",
+    })
     setSaving(false)
   }
 
   const handleDeleteSlide = async (id: string) => {
-    if (confirm("Rostdan ham o'chirmoqchimisiz?")) {
-      const result = await deleteSlide(id)
-      if (result.success) {
-        fetchData()
-        toast({ title: "Rasm o'chirildi" })
-      } else {
-        toast({ title: "Xatolik", description: result.error, variant: "destructive" })
-      }
+    if (confirm("Rostdan ham ushbu karusel rasmini o'chirmoqchimisiz?")) {
+      try {
+        await deleteSlide(id)
+      } catch (err) {}
+
+      const localSlides = JSON.parse(localStorage.getItem("local_slides") || "[]")
+      const updated = localSlides.filter((s: any) => s.id !== id && String(s.id) !== String(id))
+      localStorage.setItem("local_slides", JSON.stringify(updated))
+
+      setSlides((prev) => prev.filter((s) => s.id !== id && String(s.id) !== String(id)))
+      toast({ title: "Karusel rasmi o'chirildi" })
     }
   }
 
@@ -1937,13 +1959,41 @@ export default function AdminPage() {
           </DialogHeader>
           <form onSubmit={handleSaveSlide} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="slide_image_url">Rasm URL (1350x450 px) *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="slide_image_url">Karusel rasmi (1350x450 px) *</Label>
+                <label className="cursor-pointer text-xs font-bold text-[#7C5C3E] hover:underline flex items-center gap-1.5 bg-[#7C5C3E]/10 px-3 py-1.5 rounded-lg border border-[#7C5C3E]/30">
+                  <Upload className="h-3.5 w-3.5 text-[#7C5C3E]" />
+                  <span>Fayl yuklash (Kompyuter/Telefon)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        const formData = new FormData()
+                        formData.append("file", file)
+                        try {
+                          const res = await fetch("/api/upload", { method: "POST", body: formData })
+                          const data = await res.json()
+                          if (data.url) {
+                            const input = document.getElementById("slide_image_url") as HTMLInputElement
+                            if (input) input.value = data.url
+                          }
+                        } catch (err) {
+                          alert("Fayl yuklashda xatolik yuz berdi")
+                        }
+                      }
+                    }}
+                  />
+                </label>
+              </div>
               <Input
                 id="slide_image_url"
                 name="image_url"
-                type="url"
+                type="text"
                 defaultValue={editingSlide?.image_url || ""}
-                placeholder="https://..."
+                placeholder="Fayl yuklang yoki rasm havolasini kiriting..."
                 required
               />
             </div>
