@@ -99,80 +99,52 @@ export default function AdminPage() {
   const supabase = createBrowserClient() // Use createBrowserClient for client-side
 
   async function fetchData() {
-    // 1. Instant Paint from Local Cache (0ms response)
-    const localProds = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_products") || "[]") : []
-    const localOrders = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_admin_orders") || "[]") : []
+    setLoading(false) // Don't block UI
 
-    if (localProds.length > 0) setProducts(localProds)
-    if (localOrders.length > 0) setOrders(localOrders)
-
-    // Calculate initial stats from local data
-    const initTotalRev = localOrders.reduce((sum: number, o: any) => sum + (o.total_amount || 0), 0)
-    const initPending = localOrders.filter((o: any) => o.status === "pending").length
-    setStats((prev) => ({
-      ...prev,
-      totalOrders: localOrders.length,
-      totalRevenue: initTotalRev,
-      totalProducts: localProds.length,
-      pendingOrders: initPending,
-    }))
-
-    setLoading(false)
-
-    // 2. Background DB Sync with 1200ms timeout so Admin Panel NEVER hangs
+    // Always fetch fresh data from Supabase — no localStorage merging
     try {
-      const fetchWithTimeout = async () => {
-        return Promise.all([
-          supabase.from("products").select("*").order("created_at", { ascending: false }),
-          supabase.from("carousel_slides").select("*").order("sort_order"),
-          supabase.from("store_settings").select("*").maybeSingle(),
-          supabase.from("users").select("*").order("created_at", { ascending: false }),
-          supabase.from("orders").select("*"),
-        ])
-      }
+      const [productsRes, slidesRes, settingsRes, usersRes, ordersRes] = await Promise.all([
+        supabase.from("products").select("*").order("created_at", { ascending: false }),
+        supabase.from("carousel_slides").select("*").order("sort_order"),
+        supabase.from("store_settings").select("*").maybeSingle(),
+        supabase.from("users").select("*").order("created_at", { ascending: false }),
+        supabase.from("orders").select("*"),
+      ])
 
-      const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 1200))
-      const res: any = await Promise.race([fetchWithTimeout(), timeout])
+      // Normalize DB products: map is_available -> is_active for UI
+      const dbProducts = (productsRes?.data || []).map((p: any) => ({
+        ...p,
+        is_active: p.is_available ?? true,
+        colors: p.color_variants || [],
+        rating: p.admin_rating || 5.0,
+        rating_count: 0,
+        favorites_count: 0,
+        min_rating: 4.4,
+        uzum_link: p.uzum_link || "",
+        updated_at: p.updated_at || p.created_at,
+      }))
 
-      if (res && Array.isArray(res)) {
-        const [productsRes, slidesRes, settingsRes, usersRes, ordersRes] = res
-        // Normalize DB products: map is_available -> is_active for UI compatibility
-        const dbProducts = (productsRes?.data || []).map((p: any) => ({
-          ...p,
-          is_active: p.is_available ?? p.is_active ?? true,
-          colors: p.color_variants || p.colors || [],
-          rating: p.admin_rating || 5.0,
-          rating_count: 0,
-          favorites_count: 0,
-          min_rating: 4.4,
-          uzum_link: p.uzum_link || "",
-          updated_at: p.updated_at || p.created_at,
-        }))
-        const mergedProducts = [...localProds, ...dbProducts.filter((p: any) => !localProds.some((lp: any) => lp.id === p.id))]
+      const dbOrders = ordersRes?.data || []
 
-        const dbOrders = ordersRes?.data || []
-        const mergedOrders = [...localOrders, ...dbOrders.filter((o: any) => !localOrders.some((lo: any) => lo.id === o.id))]
+      setProducts(dbProducts)
+      setSlides(slidesRes?.data || [])
+      if (settingsRes?.data) setSettings(settingsRes.data)
+      setUsers(usersRes?.data || [])
+      setOrders(dbOrders)
 
-        setProducts(mergedProducts)
-        setSlides(slidesRes?.data || [])
-        if (settingsRes?.data) setSettings(settingsRes.data)
-        setUsers(usersRes?.data || [])
-        setOrders(mergedOrders)
+      const totalRevenue = dbOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0)
+      const pendingOrders = dbOrders.filter((o: any) => o.status === "pending").length
 
-        const totalRevenue = mergedOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0)
-        const pendingOrders = mergedOrders.filter((o: any) => o.status === "pending").length
-
-        setStats({
-          totalOrders: mergedOrders.length,
-          totalRevenue,
-          totalProducts: mergedProducts.length,
-          totalUsers: usersRes?.data?.length || 0,
-          pendingOrders,
-          topProducts: [],
-        })
-      }
+      setStats({
+        totalOrders: dbOrders.length,
+        totalRevenue,
+        totalProducts: dbProducts.length,
+        totalUsers: usersRes?.data?.length || 0,
+        pendingOrders,
+        topProducts: [],
+      })
     } catch (error) {
-      console.warn("Background admin sync skipped:", error)
+      console.warn("Admin fetchData error:", error)
     }
   }
 
@@ -330,6 +302,26 @@ export default function AdminPage() {
     if (result.success) {
       setProductDialogOpen(false)
       setEditingProduct(null)
+      // Immediately update state with the new/updated product
+      if (result.product) {
+        const normalized = {
+          ...result.product,
+          is_active: (result.product as any).is_available ?? result.product.is_active ?? true,
+          colors: (result.product as any).color_variants || (result.product as any).colors || [],
+          rating: (result.product as any).admin_rating || 5.0,
+          rating_count: 0,
+          favorites_count: 0,
+          min_rating: 4.4,
+          uzum_link: (result.product as any).uzum_link || "",
+          updated_at: (result.product as any).updated_at || new Date().toISOString(),
+        }
+        if (editingProduct) {
+          setProducts((prev) => prev.map((p) => (p.id === normalized.id ? normalized as any : p)))
+        } else {
+          setProducts((prev) => [normalized as any, ...prev])
+        }
+      }
+      // Also refresh from DB in background
       fetchData()
       toast({
         title: editingProduct ? "Mahsulot yangilandi" : "Mahsulot qo'shildi",
