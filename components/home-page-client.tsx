@@ -17,6 +17,7 @@ interface HomePageClientProps {
 export function HomePageClient({ products, slides, settings }: HomePageClientProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [displayProducts, setDisplayProducts] = useState<Product[]>(products)
+  const [displaySlides, setDisplaySlides] = useState<CarouselSlide[]>(slides)
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -27,15 +28,23 @@ export function HomePageClient({ products, slides, settings }: HomePageClientPro
       } else {
         setDisplayProducts(products)
       }
+
+      const localSlides = JSON.parse(localStorage.getItem("local_slides") || "[]")
+      if (localSlides.length > 0) {
+        const mergedSlides = [...localSlides, ...slides.filter((s) => !localSlides.some((ls: any) => ls.id === s.id))]
+        setDisplaySlides(mergedSlides)
+      } else {
+        setDisplaySlides(slides)
+      }
     }
-  }, [products])
+  }, [products, slides])
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-background via-background to-muted/20">
       {settings?.snow_effect_enabled && <SnowEffect />}
       <Header settings={settings} onSearch={setSearchQuery} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-3 py-4 sm:px-6 md:px-12 lg:px-16">
-        {!searchQuery && <HeroCarousel slides={slides} />}
+        {!searchQuery && <HeroCarousel slides={displaySlides} />}
         <ProductGrid products={displayProducts} searchQuery={searchQuery} />
       </main>
       <Footer settings={settings} />

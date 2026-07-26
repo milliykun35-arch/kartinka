@@ -374,52 +374,54 @@ export default function AdminPage() {
 
   const handleSaveSlide = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (saving) return
     setSaving(true)
-    const formData = new FormData(e.currentTarget)
-    formData.set("is_active", formData.get("is_active") ? "true" : "false")
-
-    const rawImage = (formData.get("image_url") as string) || ""
-    const sanitizedImage = cleanImageUrl(rawImage)
-    const linkVal = (formData.get("link") as string) || ""
-    const sortOrder = Number.parseInt(formData.get("sort_order") as string, 10) || 0
-
-    const newSlide = {
-      id: editingSlide ? editingSlide.id : `slide-${Date.now()}`,
-      image_url: sanitizedImage,
-      link: linkVal,
-      sort_order: sortOrder,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    }
 
     try {
-      if (editingSlide) {
-        await updateSlide(editingSlide.id, formData)
-      } else {
-        await createSlide(formData)
+      const formData = new FormData(e.currentTarget)
+      formData.set("is_active", formData.get("is_active") ? "true" : "false")
+
+      const rawImage = (formData.get("image_url") as string) || ""
+      const sanitizedImage = cleanImageUrl(rawImage)
+      const linkVal = (formData.get("link") as string) || ""
+      const sortOrder = Number.parseInt(formData.get("sort_order") as string, 10) || 0
+
+      const newSlide = {
+        id: editingSlide ? editingSlide.id : `slide-${Date.now()}`,
+        image_url: sanitizedImage,
+        link: linkVal,
+        sort_order: sortOrder,
+        is_active: true,
+        created_at: new Date().toISOString(),
       }
+
+      // 1. Instant local update (0ms delay)
+      const localSlides = JSON.parse(localStorage.getItem("local_slides") || "[]")
+      let updatedSlides = []
+      if (editingSlide) {
+        updatedSlides = localSlides.map((s: any) => (s.id === editingSlide.id ? newSlide : s))
+        setSlides((prev) => prev.map((s) => (s.id === editingSlide.id ? newSlide : s)))
+      } else {
+        updatedSlides = [newSlide, ...localSlides]
+        setSlides((prev) => [newSlide, ...prev])
+      }
+      localStorage.setItem("local_slides", JSON.stringify(updatedSlides))
+
+      // 2. Non-blocking background sync
+      editingSlide ? updateSlide(editingSlide.id, formData).catch(() => {}) : createSlide(formData).catch(() => {})
+
+      setSlideDialogOpen(false)
+      setEditingSlide(null)
+      toast({
+        title: editingSlide ? "Karusel rasmi yangilandi" : "Karusel rasmi qo'shildi",
+        description: "O'zgarishlar muvaffaqiyatli saqlandi",
+      })
     } catch (err) {
-      console.warn("Slide save server fallback:", err)
+      console.error("Slide save error:", err)
+      toast({ title: "Xatolik", description: "Saqlashda xatolik yuz berdi", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
-
-    const localSlides = JSON.parse(localStorage.getItem("local_slides") || "[]")
-    let updatedSlides = []
-    if (editingSlide) {
-      updatedSlides = localSlides.map((s: any) => (s.id === editingSlide.id ? newSlide : s))
-      setSlides((prev) => prev.map((s) => (s.id === editingSlide.id ? newSlide : s)))
-    } else {
-      updatedSlides = [newSlide, ...localSlides]
-      setSlides((prev) => [newSlide, ...prev])
-    }
-    localStorage.setItem("local_slides", JSON.stringify(updatedSlides))
-
-    setSlideDialogOpen(false)
-    setEditingSlide(null)
-    toast({
-      title: editingSlide ? "Rasm yangilandi" : "Karusel rasmi qo'shildi",
-      description: "O'zgarishlar muvaffaqiyatli saqlandi",
-    })
-    setSaving(false)
   }
 
   const handleDeleteSlide = async (id: string) => {
