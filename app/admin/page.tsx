@@ -94,70 +94,74 @@ export default function AdminPage() {
   const supabase = createBrowserClient() // Use createBrowserClient for client-side
 
   async function fetchData() {
-    setLoading(true)
+    // 1. Instant Paint from Local Cache (0ms response)
+    const localProds = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_products") || "[]") : []
+    const localOrders = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_admin_orders") || "[]") : []
+
+    if (localProds.length > 0) setProducts(localProds)
+    if (localOrders.length > 0) setOrders(localOrders)
+
+    // Calculate initial stats from local data
+    const initTotalRev = localOrders.reduce((sum: number, o: any) => sum + (o.total_amount || 0), 0)
+    const initPending = localOrders.filter((o: any) => o.status === "pending").length
+    setStats((prev) => ({
+      ...prev,
+      totalOrders: localOrders.length,
+      totalRevenue: initTotalRev,
+      totalProducts: localProds.length,
+      pendingOrders: initPending,
+    }))
+
+    setLoading(false)
+
+    // 2. Background DB Sync with 1200ms timeout so Admin Panel NEVER hangs
     try {
-      const [productsRes, slidesRes, settingsRes, usersRes, notificationsRes, ordersRes] = await Promise.all([
-        supabase.from("products").select("*").order("created_at", { ascending: false }),
-        supabase.from("carousel_slides").select("*").order("sort_order"),
-        supabase.from("store_settings").select("*").maybeSingle(),
-        supabase.from("users").select("*").order("created_at", { ascending: false }),
-        supabase.from("admin_notifications").select("*").order("created_at", { ascending: false }).limit(50),
-        supabase.from("orders").select("*"),
-      ])
+      const fetchWithTimeout = async () => {
+        return Promise.all([
+          supabase.from("products").select("*").order("created_at", { ascending: false }),
+          supabase.from("carousel_slides").select("*").order("sort_order"),
+          supabase.from("store_settings").select("*").maybeSingle(),
+          supabase.from("users").select("*").order("created_at", { ascending: false }),
+          supabase.from("admin_notifications").select("*").order("created_at", { ascending: false }).limit(50),
+          supabase.from("orders").select("*"),
+        ])
+      }
 
-      const dbProducts = productsRes.data || []
-      const localProds = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_products") || "[]") : []
-      const mergedProducts = [...localProds, ...dbProducts.filter((p: any) => !localProds.some((lp: any) => lp.id === p.id))]
+      const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 1200))
+      const res: any = await Promise.race([fetchWithTimeout(), timeout])
 
-      setProducts(mergedProducts)
-      setSlides(slidesRes.data || [])
-      setSettings(settingsRes.data)
-      setUsers(usersRes.data || [])
-      setOrders(ordersRes.data || [])
+      if (res && Array.isArray(res)) {
+        const [productsRes, slidesRes, settingsRes, usersRes, notificationsRes, ordersRes] = res
+        const dbProducts = productsRes?.data || []
+        const mergedProducts = [...localProds, ...dbProducts.filter((p: any) => !localProds.some((lp: any) => lp.id === p.id))]
 
-      const notifs = notificationsRes.data || []
-      setNotifications(notifs)
-      setUnreadCount(notifs.filter((n: any) => !n.is_read).length)
+        const dbOrders = ordersRes?.data || []
+        const mergedOrders = [...localOrders, ...dbOrders.filter((o: any) => !localOrders.some((lo: any) => lo.id === o.id))]
 
-      const ordersData = ordersRes.data || []
-      const totalRevenue = ordersData.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0)
-      const pendingOrders = ordersData.filter((o: any) => o.status === "pending").length
+        setProducts(mergedProducts)
+        setSlides(slidesRes?.data || [])
+        if (settingsRes?.data) setSettings(settingsRes.data)
+        setUsers(usersRes?.data || [])
+        setOrders(mergedOrders)
 
-      // Calculate product sales
-      const productSales: { [key: string]: { name: string; count: number; revenue: number } } = {}
-      ordersData.forEach((order: any) => {
-        if (order.items && Array.isArray(order.items)) {
-          order.items.forEach((item: any) => {
-            if (!productSales[item.product_id]) {
-              productSales[item.product_id] = {
-                name: item.product_name,
-                count: 0,
-                revenue: 0,
-              }
-            }
-            productSales[item.product_id].count += item.quantity || 1
-            productSales[item.product_id].revenue += (item.price || 0) * (item.quantity || 1)
-          })
-        }
-      })
+        const notifs = notificationsRes?.data || []
+        setNotifications(notifs)
+        setUnreadCount(notifs.filter((n: any) => !n.is_read).length)
 
-      const topProducts = Object.entries(productSales)
-        .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5)
+        const totalRevenue = mergedOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0)
+        const pendingOrders = mergedOrders.filter((o: any) => o.status === "pending").length
 
-      setStats({
-        totalOrders: ordersData.length,
-        totalRevenue,
-        totalProducts: productsRes.data?.length || 0,
-        totalUsers: usersRes.data?.length || 0,
-        pendingOrders,
-        topProducts,
-      })
-
-      setLoading(false)
+        setStats({
+          totalOrders: mergedOrders.length,
+          totalRevenue,
+          totalProducts: mergedProducts.length,
+          totalUsers: usersRes?.data?.length || 0,
+          pendingOrders,
+          topProducts: [],
+        })
+      }
     } catch (error) {
-      setLoading(false)
+      console.warn("Background admin sync skipped:", error)
     }
   }
 
