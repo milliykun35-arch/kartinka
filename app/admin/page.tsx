@@ -372,31 +372,51 @@ export default function AdminPage() {
     }
   }
 
-  const handleSaveSlide = async (e: React.FormEvent<HTMLFormElement>) => {
+  const [slideImageUrl, setSlideImageUrl] = useState("")
+  const [slideLink, setSlideLink] = useState("")
+  const [slideSortOrder, setSlideSortOrder] = useState(0)
+  const [uploadingSlideImg, setUploadingSlideImg] = useState(false)
+
+  const handleOpenAddSlide = () => {
+    setEditingSlide(null)
+    setSlideImageUrl("")
+    setSlideLink("")
+    setSlideSortOrder(0)
+    setSlideDialogOpen(true)
+  }
+
+  const handleOpenEditSlide = (slide: any) => {
+    setEditingSlide(slide)
+    setSlideImageUrl(slide.image_url || "")
+    setSlideLink(slide.link || "")
+    setSlideSortOrder(slide.sort_order || 0)
+    setSlideDialogOpen(true)
+  }
+
+  const handleSaveSlide = (e: React.FormEvent) => {
     e.preventDefault()
     if (saving) return
+
+    if (!slideImageUrl.trim()) {
+      alert("Iltimos, rasm yuklang yoki rasm havolasini kiriting!")
+      return
+    }
+
     setSaving(true)
 
     try {
-      const formData = new FormData(e.currentTarget)
-      formData.set("is_active", formData.get("is_active") ? "true" : "false")
-
-      const rawImage = (formData.get("image_url") as string) || ""
-      const sanitizedImage = cleanImageUrl(rawImage)
-      const linkVal = (formData.get("link") as string) || ""
-      const sortOrder = Number.parseInt(formData.get("sort_order") as string, 10) || 0
-
+      const sanitizedImage = cleanImageUrl(slideImageUrl.trim())
       const newSlide = {
         id: editingSlide ? editingSlide.id : `slide-${Date.now()}`,
         image_url: sanitizedImage,
-        link: linkVal,
-        sort_order: sortOrder,
+        link: slideLink.trim(),
+        sort_order: Number(slideSortOrder) || 0,
         is_active: true,
         created_at: new Date().toISOString(),
       }
 
       // 1. Instant local update (0ms delay)
-      const localSlides = JSON.parse(localStorage.getItem("local_slides") || "[]")
+      const localSlides = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("local_slides") || "[]") : []
       let updatedSlides = []
       if (editingSlide) {
         updatedSlides = localSlides.map((s: any) => (s.id === editingSlide.id ? newSlide : s))
@@ -408,17 +428,22 @@ export default function AdminPage() {
       localStorage.setItem("local_slides", JSON.stringify(updatedSlides))
 
       // 2. Non-blocking background sync
+      const formData = new FormData()
+      formData.set("image_url", sanitizedImage)
+      formData.set("link", slideLink.trim())
+      formData.set("sort_order", String(slideSortOrder))
+      formData.set("is_active", "true")
+
       editingSlide ? updateSlide(editingSlide.id, formData).catch(() => {}) : createSlide(formData).catch(() => {})
 
       setSlideDialogOpen(false)
       setEditingSlide(null)
       toast({
         title: editingSlide ? "Karusel rasmi yangilandi" : "Karusel rasmi qo'shildi",
-        description: "O'zgarishlar muvaffaqiyatli saqlandi",
+        description: "Bosh sahifa karuselida rasm joylashtirildi",
       })
     } catch (err) {
       console.error("Slide save error:", err)
-      toast({ title: "Xatolik", description: "Saqlashda xatolik yuz berdi", variant: "destructive" })
     } finally {
       setSaving(false)
     }
@@ -1035,11 +1060,8 @@ export default function AdminPage() {
                 <p className="text-sm text-gray-500">{slides.length} ta rasm (1350x450 px)</p>
               </div>
               <Button
-                onClick={() => {
-                  setEditingSlide(null)
-                  setSlideDialogOpen(true)
-                }}
-                className="gap-2 bg-[#7C5C3E] text-white shadow-lg hover:bg-[#7C5C3E]/90"
+                onClick={handleOpenAddSlide}
+                className="gap-2 bg-[#7C5C3E] text-white shadow-lg hover:bg-[#7C5C3E]/90 font-bold"
               >
                 <Plus className="h-4 w-4" />
                 Yangi rasm
@@ -1068,10 +1090,7 @@ export default function AdminPage() {
                           variant="outline"
                           size="sm"
                           className="border-[#7C5C3E]/20 text-[#7C5C3E] hover:bg-[#7C5C3E]/10 bg-transparent"
-                          onClick={() => {
-                            setEditingSlide(slide)
-                            setSlideDialogOpen(true)
-                          }}
+                          onClick={() => handleOpenEditSlide(slide)}
                         >
                           <Pencil className="h-3 w-3" />
                         </Button>
@@ -1962,10 +1981,10 @@ export default function AdminPage() {
           <form onSubmit={handleSaveSlide} className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="slide_image_url">Karusel rasmi (1350x450 px) *</Label>
+                <Label htmlFor="slide_image_url" className="font-semibold">Karusel rasmi (1350x450 px) *</Label>
                 <label className="cursor-pointer text-xs font-bold text-[#7C5C3E] hover:underline flex items-center gap-1.5 bg-[#7C5C3E]/10 px-3 py-1.5 rounded-lg border border-[#7C5C3E]/30">
-                  <Upload className="h-3.5 w-3.5 text-[#7C5C3E]" />
-                  <span>Fayl yuklash (Kompyuter/Telefon)</span>
+                  {uploadingSlideImg ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5 text-[#7C5C3E]" />}
+                  <span>{uploadingSlideImg ? "Yuklanmoqda..." : "Fayl yuklash (Kompyuter/Telefon)"}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -1973,17 +1992,19 @@ export default function AdminPage() {
                     onChange={async (e) => {
                       const file = e.target.files?.[0]
                       if (file) {
+                        setUploadingSlideImg(true)
                         const formData = new FormData()
                         formData.append("file", file)
                         try {
                           const res = await fetch("/api/upload", { method: "POST", body: formData })
                           const data = await res.json()
                           if (data.url) {
-                            const input = document.getElementById("slide_image_url") as HTMLInputElement
-                            if (input) input.value = data.url
+                            setSlideImageUrl(data.url)
                           }
                         } catch (err) {
                           alert("Fayl yuklashda xatolik yuz berdi")
+                        } finally {
+                          setUploadingSlideImg(false)
                         }
                       }
                     }}
@@ -1994,39 +2015,40 @@ export default function AdminPage() {
                 id="slide_image_url"
                 name="image_url"
                 type="text"
-                defaultValue={editingSlide?.image_url || ""}
+                value={slideImageUrl}
+                onChange={(e) => setSlideImageUrl(e.target.value)}
                 placeholder="Fayl yuklang yoki rasm havolasini kiriting..."
                 required
+                className="h-11 border-[#7C5C3E]/30 font-medium"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="link">Havola (ixtiyoriy)</Label>
+              <Label htmlFor="link" className="font-semibold">Havola (ixtiyoriy)</Label>
               <Input
                 id="link"
                 name="link"
-                type="url"
-                defaultValue={editingSlide?.link || ""}
-                placeholder="https://..."
+                type="text"
+                value={slideLink}
+                onChange={(e) => setSlideLink(e.target.value)}
+                placeholder="Havola (masalan https://... yoki bo'sh qoldiring)"
+                className="h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sort_order">Tartib raqami</Label>
-              <Input id="sort_order" name="sort_order" type="number" defaultValue={editingSlide?.sort_order || 0} />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="slide_is_active"
-                name="is_active"
-                defaultChecked={editingSlide?.is_active ?? true}
-                value="true"
+              <Label htmlFor="sort_order" className="font-semibold">Tartib raqami</Label>
+              <Input
+                id="sort_order"
+                name="sort_order"
+                type="number"
+                value={slideSortOrder}
+                onChange={(e) => setSlideSortOrder(Number(e.target.value) || 0)}
+                className="h-11"
               />
-              <Label htmlFor="slide_is_active">Faol</Label>
             </div>
 
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end pt-2">
               <Button
                 type="button"
                 variant="outline"
@@ -2034,11 +2056,13 @@ export default function AdminPage() {
                   setSlideDialogOpen(false)
                   setEditingSlide(null)
                 }}
+                className="h-11 px-5"
               >
                 Bekor qilish
               </Button>
-              <Button type="submit" className="bg-[#7C5C3E] hover:bg-[#7C5C3E]/90" disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Saqlash"}
+              <Button type="submit" className="h-11 px-6 bg-[#7C5C3E] hover:bg-[#7C5C3E]/90 text-white font-bold rounded-xl" disabled={saving || uploadingSlideImg}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                {editingSlide ? "Saqlash" : "Qo'shish"}
               </Button>
             </div>
           </form>
