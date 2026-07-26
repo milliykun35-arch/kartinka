@@ -173,7 +173,6 @@ export function CartClient() {
         created_at: new Date().toISOString(),
       }
 
-      // Also trigger Telegram notification directly from client
       sendTelegramOrderNotification({
         orderNumber,
         customerName: orderForm.name.trim(),
@@ -181,14 +180,6 @@ export function CartClient() {
         totalAmount: finalTotal,
         items: itemsForOrder,
       }).catch((err) => console.warn("Client telegram notify:", err))
-        price: itemsForOrder[0]?.price || 0,
-        quantity: itemsForOrder[0]?.quantity || 1,
-        product_name: itemsForOrder[0]?.name || "Devoriy rasm",
-        status: "pending",
-        payment_method: "call",
-        items: itemsForOrder,
-        created_at: new Date().toISOString(),
-      }
 
       const savedOrders = JSON.parse(localStorage.getItem("local_admin_orders") || "[]")
       savedOrders.unshift(localOrder)
