@@ -127,7 +127,6 @@ export default function AdminPage() {
           supabase.from("carousel_slides").select("*").order("sort_order"),
           supabase.from("store_settings").select("*").maybeSingle(),
           supabase.from("users").select("*").order("created_at", { ascending: false }),
-          supabase.from("admin_notifications").select("*").order("created_at", { ascending: false }).limit(50),
           supabase.from("orders").select("*"),
         ])
       }
@@ -136,8 +135,19 @@ export default function AdminPage() {
       const res: any = await Promise.race([fetchWithTimeout(), timeout])
 
       if (res && Array.isArray(res)) {
-        const [productsRes, slidesRes, settingsRes, usersRes, notificationsRes, ordersRes] = res
-        const dbProducts = productsRes?.data || []
+        const [productsRes, slidesRes, settingsRes, usersRes, ordersRes] = res
+        // Normalize DB products: map is_available -> is_active for UI compatibility
+        const dbProducts = (productsRes?.data || []).map((p: any) => ({
+          ...p,
+          is_active: p.is_available ?? p.is_active ?? true,
+          colors: p.color_variants || p.colors || [],
+          rating: p.admin_rating || 5.0,
+          rating_count: 0,
+          favorites_count: 0,
+          min_rating: 4.4,
+          uzum_link: p.uzum_link || "",
+          updated_at: p.updated_at || p.created_at,
+        }))
         const mergedProducts = [...localProds, ...dbProducts.filter((p: any) => !localProds.some((lp: any) => lp.id === p.id))]
 
         const dbOrders = ordersRes?.data || []
@@ -148,10 +158,6 @@ export default function AdminPage() {
         if (settingsRes?.data) setSettings(settingsRes.data)
         setUsers(usersRes?.data || [])
         setOrders(mergedOrders)
-
-        const notifs = notificationsRes?.data || []
-        setNotifications(notifs)
-        setUnreadCount(notifs.filter((n: any) => !n.is_read).length)
 
         const totalRevenue = mergedOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0)
         const pendingOrders = mergedOrders.filter((o: any) => o.status === "pending").length
@@ -183,7 +189,7 @@ export default function AdminPage() {
     }
   }, [isAuthenticated])
 
-  // Real-time subscription for orders and notifications
+  // Real-time subscription for orders
   useEffect(() => {
     if (!isAuthenticated) return // Only set up subscriptions if authenticated
 
@@ -202,30 +208,10 @@ export default function AdminPage() {
       )
       .subscribe()
 
-    const notificationsChannel = supabase
-      .channel("notifications-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "admin_notifications",
-        },
-        (payload) => {
-          fetchData()
-          toast({
-            title: "Yangi xabar",
-            description: payload.new.title,
-          })
-        },
-      )
-      .subscribe()
-
     return () => {
       ordersChannel.unsubscribe()
-      notificationsChannel.unsubscribe()
     }
-  }, [isAuthenticated, toast, supabase]) // Added dependencies
+  }, [isAuthenticated])
 
   const handleAccessCodeSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -243,13 +229,11 @@ export default function AdminPage() {
   }
 
   const markAsRead = async (notificationId: string) => {
-    await supabase.from("admin_notifications").update({ is_read: true }).eq("id", notificationId)
-    fetchData()
+    // notifications feature disabled - table not available
   }
 
   const markAllAsRead = async () => {
-    await supabase.from("admin_notifications").update({ is_read: true }).eq("is_read", false)
-    fetchData()
+    // notifications feature disabled - table not available
   }
 
   if (!isAuthenticated) {
