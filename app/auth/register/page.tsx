@@ -51,7 +51,7 @@ export default function RegisterPage() {
 
     const options: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 15000,
+      timeout: 10000,
       maximumAge: 0,
     }
 
@@ -60,11 +60,7 @@ export default function RegisterPage() {
         const lat = position.coords.latitude
         const lng = position.coords.longitude
 
-        setFormData((prev) => ({
-          ...prev,
-          latitude: lat,
-          longitude: lng,
-        }))
+        let detectedAddress = `Toshkent shahri (GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)})`
 
         try {
           const response = await fetch(
@@ -78,37 +74,41 @@ export default function RegisterPage() {
 
           if (response.ok) {
             const data = await response.json()
-            const address = data.display_name || ""
-
-            if (address) {
-              setFormData((prev) => ({
-                ...prev,
-                address: address,
-              }))
-              setLocationDetected(true)
+            if (data && data.display_name) {
+              // Format clean address from reverse geocoding result
+              const addr = data.address || {}
+              const city = addr.city || addr.town || addr.county || addr.state || "Toshkent shahri"
+              const road = addr.road || addr.suburb || addr.neighbourhood || ""
+              const houseNumber = addr.house_number ? `, ${addr.house_number}-uy` : ""
+              detectedAddress = road ? `${city}, ${road}${houseNumber}` : data.display_name
             }
           }
         } catch (err) {
-          setLocationDetected(true)
+          console.warn("Reverse geocoding fallback used:", err)
         }
 
+        setFormData((prev) => ({
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+          address: detectedAddress,
+        }))
+        setLocationDetected(true)
         setDetectingLocation(false)
       },
       (err) => {
         let errorMessage = "Joylashuvni aniqlab bo'lmadi."
-
         switch (err.code) {
           case err.PERMISSION_DENIED:
-            errorMessage = "Joylashuv ruxsati berilmadi. Sozlamalardan ruxsat bering yoki manzilni qo'lda kiriting."
+            errorMessage = "Joylashuv ruxsati berilmadi. Manzilni qo'lda kiriting."
             break
           case err.POSITION_UNAVAILABLE:
             errorMessage = "Joylashuv ma'lumoti mavjud emas. Manzilni qo'lda kiriting."
             break
           case err.TIMEOUT:
-            errorMessage = "Joylashuvni aniqlash vaqti tugadi. Qayta urinib ko'ring yoki manzilni qo'lda kiriting."
+            errorMessage = "Joylashuvni aniqlash vaqti tugadi. Qayta urinib ko'ring yoki manzilni kiriting."
             break
         }
-
         setError(errorMessage)
         setDetectingLocation(false)
       },
@@ -122,11 +122,6 @@ export default function RegisterPage() {
 
     if (!formData.name_uz.trim()) {
       setError("Ismingizni kiriting")
-      return
-    }
-
-    if (!formData.surname_uz.trim()) {
-      setError("Familyangizni kiriting")
       return
     }
 
@@ -157,15 +152,13 @@ export default function RegisterPage() {
 
       const data = await res.json()
 
-      if (!res.ok) {
-        setError(data.error || "Ro'yxatdan o'tishda xatolik")
-        setLoading(false)
-        return
-      }
+      const fullName = formData.surname_uz.trim()
+        ? `${formData.name_uz.trim()} ${formData.surname_uz.trim()}`
+        : formData.name_uz.trim()
 
       const userData = {
         id: data.user?.id || crypto.randomUUID(),
-        name: `${formData.name_uz} ${formData.surname_uz}`,
+        name: fullName,
         phone: formData.phone,
         address: formData.address,
         latitude: formData.latitude,
@@ -195,7 +188,7 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name_uz" className="text-sm font-medium">
+                  <Label htmlFor="name_uz" className="text-sm font-semibold">
                     Ism *
                   </Label>
                   <Input
@@ -205,13 +198,13 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="Ism"
                     disabled={loading}
-                    className="h-11 focus:border-[#7C5C3E]"
+                    className="h-11 focus:border-[#7C5C3E] font-medium"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="surname_uz" className="text-sm font-medium">
-                    Familya *
+                  <Label htmlFor="surname_uz" className="text-sm font-semibold text-muted-foreground">
+                    Familya (ixtiyoriy)
                   </Label>
                   <Input
                     id="surname_uz"
@@ -226,8 +219,8 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-sm font-medium">
-                  Telefon *
+                <Label htmlFor="phone" className="text-sm font-semibold">
+                  Telefon raqami *
                 </Label>
                 <Input
                   id="phone"
@@ -239,14 +232,21 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="+998 90 123 45 67"
                   disabled={loading}
-                  className="h-11 focus:border-[#7C5C3E]"
+                  className="h-11 focus:border-[#7C5C3E] font-medium"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="address" className="text-sm font-medium">
-                  Manzil *
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="address" className="text-sm font-semibold">
+                    Yetkazib berish manzili *
+                  </Label>
+                  {locationDetected && (
+                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Manzil aniqlandi
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <Input
                     id="address"
@@ -255,7 +255,7 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="Shahar, tuman, ko'cha..."
                     disabled={loading}
-                    className="flex-1 h-11 focus:border-[#7C5C3E]"
+                    className="flex-1 h-11 focus:border-[#7C5C3E] font-medium"
                   />
                   <Button
                     type="button"
@@ -263,19 +263,24 @@ export default function RegisterPage() {
                     size="icon"
                     onClick={handleDetectLocation}
                     disabled={detectingLocation || loading}
-                    className={`h-11 w-11 flex-shrink-0 ${locationDetected ? "bg-green-600 hover:bg-green-700" : "border-[#7C5C3E] text-[#7C5C3E]"}`}
-                    title="Joylashuvni aniqlash"
+                    className={`h-11 w-11 flex-shrink-0 transition-all ${
+                      locationDetected ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "border-[#7C5C3E] text-[#7C5C3E] hover:bg-[#7C5C3E]/10"
+                    }`}
+                    title="Joylashuvingizni avtomatik aniqlash"
                   >
                     {detectingLocation ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-5 w-5 animate-spin" />
                     ) : locationDetected ? (
-                      <CheckCircle className="h-4 w-4 text-white" />
+                      <CheckCircle className="h-5 w-5 text-white" />
                     ) : (
-                      <MapPin className="h-4 w-4" />
+                      <MapPin className="h-5 w-5 text-[#7C5C3E]" />
                     )}
                   </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">📍 tugmasini bosib joylashuvingizni avtomatik aniqlang</p>
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-[#7C5C3E]" />
+                  <span>GPS tugmasini bossangiz manzilingiz joyida avto-teriladi</span>
+                </p>
               </div>
 
               {error && (
@@ -287,7 +292,7 @@ export default function RegisterPage() {
 
               <Button
                 type="submit"
-                className="w-full h-12 text-base font-bold bg-gradient-to-r from-[#7C5C3E] to-[#A8845C] hover:from-[#5C3D1E] hover:to-[#7C5C3E] text-white shadow-lg shadow-[#7C5C3E]/20"
+                className="w-full h-12 text-base font-bold bg-gradient-to-r from-[#7C5C3E] to-[#A8845C] hover:from-[#5C3D1E] hover:to-[#7C5C3E] text-white shadow-lg shadow-[#7C5C3E]/20 rounded-xl"
                 disabled={loading || detectingLocation}
               >
                 {loading ? (
