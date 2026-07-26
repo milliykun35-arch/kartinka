@@ -91,6 +91,11 @@ export default function AdminPage() {
     topProducts: [] as any[],
   })
 
+  const [slideImageUrl, setSlideImageUrl] = useState("")
+  const [slideLink, setSlideLink] = useState("")
+  const [slideSortOrder, setSlideSortOrder] = useState(0)
+  const [uploadingSlideImg, setUploadingSlideImg] = useState(false)
+
   const supabase = createBrowserClient() // Use createBrowserClient for client-side
 
   async function fetchData() {
@@ -371,11 +376,6 @@ export default function AdminPage() {
       }
     }
   }
-
-  const [slideImageUrl, setSlideImageUrl] = useState("")
-  const [slideLink, setSlideLink] = useState("")
-  const [slideSortOrder, setSlideSortOrder] = useState(0)
-  const [uploadingSlideImg, setUploadingSlideImg] = useState(false)
 
   const handleOpenAddSlide = () => {
     setEditingSlide(null)
