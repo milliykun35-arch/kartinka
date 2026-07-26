@@ -1,0 +1,308 @@
+# 💳 To'lov Tizimlari - To'liq Sozlash Qo'llanmasi
+
+## 📋 Mundarija
+1. [PayMe Sozlash](#payme-sozlash)
+2. [Click Sozlash](#click-sozlash)
+3. [Environment Variables](#environment-variables)
+4. [Webhook Sozlash](#webhook-sozlash)
+5. [Test Qilish](#test-qilish)
+6. [Production Deploy](#production-deploy)
+
+---
+
+## 1️⃣ PayMe Sozlash
+
+### A. PayMe Business'ga Ro'yxatdan O'tish
+
+1. **Saytga kiring:** https://business.payme.uz
+2. **"Ro'yxatdan o'tish" tugmasini bosing**
+3. **Kompaniya ma'lumotlarini kiriting:**
+   - Kompaniya nomi
+   - INN (STIR)
+   - Bank rekvizitlari
+   - Direktor pasport ma'lumotlari
+
+4. **Hujjatlarni yuklang:**
+   - Kompaniya guvohnomasi
+   - Bank ma'lumotnoması
+   - Direktor pasporti
+
+5. **Tasdiqlanishni kuting (1-3 kun)**
+
+### B. Test Kredensiyallarni Olish
+
+Ro'yxatdan o'tgandan so'ng:
+
+1. **PayMe Business dashboard'ga kiring**
+2. **"API Kalitlar" bo'limiga o'ting**
+3. **Test environment uchun kalitlarni ko'ring:**
+
+\`\`\`
+TEST MERCHANT ID: 01158
+TEST SECRET KEY: Dq4gIKNXp9gdcjNcNN4iUDcOrCEvN1AV?opO
+\`\`\`
+
+⚠️ **MUHIM FARQ:**
+- **MERCHANT_ID** = 5 raqamli son (masalan: `01158`)
+- **SECRET_KEY** = Uzun kalit (masalan: `Dq4gIKNXp9gdcjNcNN4iUDcOrCEvN1AV?opO`)
+
+### C. Test Karta
+
+PayMe test muhitida quyidagi kartadan foydalaning:
+
+\`\`\`
+Karta raqami: 8600 0691 9540 6311
+Amal qilish muddati: Istalgan kelajak sanasi
+CVV: Istalgan 3 raqam
+SMS kod: 666666
+\`\`\`
+
+---
+
+## 2️⃣ Click Sozlash
+
+### A. Click Merchant'ga Ro'yxatdan O'tish
+
+1. **Saytga kiring:** https://my.click.uz
+2. **"Ro'yxatdan o'tish" → "Biznes uchun"**
+3. **Kompaniya ma'lumotlarini kiriting**
+4. **Click bilan shartnoma imzolang**
+
+### B. API Kredensiyallarni Olish
+
+1. **Click dashboard'ga kiring**
+2. **"Integratsiya" → "API kalitlar"**
+3. **Quyidagi ma'lumotlarni ko'chirib oling:**
+
+\`\`\`
+MERCHANT_ID: Sizning merchant ID (masalan: 12345)
+SERVICE_ID: Sizning service ID (masalan: 20890)
+SECRET_KEY: Sizning maxfiy kalit
+\`\`\`
+
+### C. Test Muhit
+
+Click test muhitida:
+
+\`\`\`
+Test karta: 8600 1234 5678 9876
+SMS kod: 123456
+\`\`\`
+
+---
+
+## 3️⃣ Environment Variables Sozlash
+
+### Vercel Dashboard'da
+
+1. **Vercel dashboard'ga kiring:** https://vercel.com
+2. **Proyektingizni tanlang**
+3. **Settings → Environment Variables**
+4. **Quyidagi o'zgaruvchilarni qo'shing:**
+
+#### PayMe uchun:
+\`\`\`bash
+PAYME_MERCHANT_ID=01158
+PAYME_SECRET_KEY=Dq4gIKNXp9gdcjNcNN4iUDcOrCEvN1AV?opO
+PAYME_TEST_MODE=true
+\`\`\`
+
+#### Click uchun:
+\`\`\`bash
+CLICK_MERCHANT_ID=12345
+CLICK_SERVICE_ID=20890
+CLICK_SECRET_KEY=your_secret_key_here
+CLICK_TEST_MODE=true
+\`\`\`
+
+#### Sayt URL:
+\`\`\`bash
+NEXT_PUBLIC_APP_URL=https://your-site.vercel.app
+\`\`\`
+
+5. **"Save" tugmasini bosing**
+6. **Proyektni qayta deploy qiling**
+
+### Local Development uchun
+
+`.env.local` fayl yarating:
+
+\`\`\`bash
+# PayMe
+PAYME_MERCHANT_ID=01158
+PAYME_SECRET_KEY=Dq4gIKNXp9gdcjNcNN4iUDcOrCEvN1AV?opO
+PAYME_TEST_MODE=true
+
+# Click
+CLICK_MERCHANT_ID=12345
+CLICK_SERVICE_ID=20890
+CLICK_SECRET_KEY=your_secret_key
+CLICK_TEST_MODE=true
+
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+\`\`\`
+
+---
+
+## 4️⃣ Webhook Sozlash
+
+### PayMe Webhook
+
+1. **PayMe Business dashboard → Sozlamalar**
+2. **Webhook URL qo'shing:**
+\`\`\`
+https://your-site.vercel.app/api/payme/webhook
+\`\`\`
+3. **Test webhook yuborish**
+
+### Click Webhook
+
+1. **Click dashboard → Integratsiya**
+2. **Webhook URL qo'shing:**
+\`\`\`
+https://your-site.vercel.app/api/click/webhook
+\`\`\`
+3. **Test prepare va complete so'rovlarini yuboring**
+
+---
+
+## 5️⃣ Test Qilish
+
+### PayMe Test
+
+1. **Saytingizga kiring**
+2. **Mahsulotni savatga qo'shing**
+3. **"PayMe orqali to'lash" tugmasini bosing**
+4. **PayMe sahifasiga yo'naltirilasiz**
+5. **Test kartani kiriting:**
+   - Karta: `8600 0691 9540 6311`
+   - SMS: `666666`
+6. **To'lovni tasdiqlang**
+7. **Buyurtma "Tasdiqlangan" statusga o'tadi**
+
+### Click Test
+
+1. **"Click orqali to'lash" tugmasini bosing**
+2. **Click sahifasiga yo'naltirilasiz**
+3. **Test kartani kiriting**
+4. **To'lovni amalga oshiring**
+
+### Console Log'larni Tekshiring
+
+Browser console'da quyidagi xabarlarni ko'rishingiz kerak:
+
+\`\`\`
+[v0] ✓ Creating Payme payment:
+[v0] - Merchant ID: 01158
+[v0] - Amount: 50000 so'm
+[v0] ✓ Payment URL generated successfully!
+\`\`\`
+
+---
+
+## 6️⃣ Production Deploy
+
+### Test'dan Production'ga O'tish
+
+#### PayMe
+
+1. **PayMe Business'da moderatsiyadan o'ting**
+2. **Production kredensiyallarni oling**
+3. **Vercel Environment Variables'ni yangilang:**
+\`\`\`bash
+PAYME_MERCHANT_ID=your_production_merchant_id
+PAYME_SECRET_KEY=your_production_secret_key
+PAYME_TEST_MODE=false  # ← MUHIM!
+\`\`\`
+
+#### Click
+
+1. **Click bilan shartnomani yakunlang**
+2. **Production kredensiyallarni oling**
+3. **Environment Variables'ni yangilang:**
+\`\`\`bash
+CLICK_MERCHANT_ID=production_merchant_id
+CLICK_SERVICE_ID=production_service_id
+CLICK_SECRET_KEY=production_secret_key
+CLICK_TEST_MODE=false  # ← MUHIM!
+\`\`\`
+
+### Redeploy
+
+\`\`\`bash
+# Vercel CLI orqali
+vercel --prod
+
+# Yoki Vercel dashboard'dan
+# Settings → Deployments → Redeploy
+\`\`\`
+
+---
+
+## 🔧 Troubleshooting
+
+### PayMe Xatolari
+
+#### ❌ "Merchant ID noto'g'ri formatda"
+**Sabab:** PAYME_MERCHANT_ID 5 raqamli emas  
+**Yechim:** `01158` formatida kiriting (to'liq 5 raqam)
+
+#### ❌ "Unauthorized"
+**Sabab:** SECRET_KEY noto'g'ri  
+**Yechim:** PayMe dashboard'dan to'g'ri kalitni ko'chirib oling
+
+#### ❌ "Order not found"
+**Sabab:** Buyurtma database'da yo'q  
+**Yechim:** Console log'larni tekshiring, buyurtma yaratilganligini tasdiqlang
+
+### Click Xatolari
+
+#### ❌ "Invalid signature"
+**Sabab:** SECRET_KEY noto'g'ri yoki signature algoritmi xato  
+**Yechim:** SECRET_KEY ni to'g'ri kiritganligini tekshiring
+
+#### ❌ "Service not found"
+**Sabab:** SERVICE_ID noto'g'ri  
+**Yechim:** Click dashboard'dan SERVICE_ID ni qayta tekshiring
+
+---
+
+## 📞 Qo'shimcha Yordam
+
+### PayMe Support
+- 📧 Email: support@payme.uz
+- 📞 Telefon: +998 78 150 01 99
+- 🌐 Website: https://business.payme.uz
+
+### Click Support
+- 📧 Email: support@click.uz
+- 📞 Telefon: +998 71 230 77 77
+- 🌐 Website: https://click.uz
+
+---
+
+## ✅ Checklist
+
+### Test Muhit
+- [ ] PayMe test kredensiyallar kiritildi
+- [ ] Click test kredensiyallar kiritildi
+- [ ] Environment variables Vercel'da sozlandi
+- [ ] Webhook URL'lar to'g'ri ko'rsatildi
+- [ ] Test karta bilan to'lov muvaffaqiyatli o'tdi
+- [ ] Buyurtma admin panelda ko'rinadi
+- [ ] Buyurtma statuslari to'g'ri yangilanadi
+
+### Production
+- [ ] PayMe moderatsiyadan o'tildi
+- [ ] Click shartnomasi imzolandi
+- [ ] Production kredensiyallar olindi
+- [ ] TEST_MODE=false qilindi
+- [ ] Production webhook URL'lar sozlandi
+- [ ] Real karta bilan test qilindi
+- [ ] To'lovlar muvaffaqiyatli o'tmoqda
+
+---
+
+🎉 **Omad!** Savol yoki muammo bo'lsa, yuqoridagi support kontaktlariga murojaat qiling.
+\`\`\`
