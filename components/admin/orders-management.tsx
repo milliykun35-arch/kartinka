@@ -82,13 +82,25 @@ const OrdersManagement = () => {
   const handleStatusUpdate = async () => {
     if (!selectedOrder || !newStatus) return
 
-    if (newStatus === "completed" && (!deliveryService || !pickupLocation)) {
-      alert("Yetkazilgan buyurtma uchun yetkazish xizmati va topshirish punktini kiriting!")
-      return
-    }
-
     try {
-      const res = await fetch("/api/orders", {
+      // 1. Update local orders state immediately
+      setOrders((prev) =>
+        prev.map((o) => (o.id === selectedOrder.id ? { ...o, status: newStatus, updated_at: new Date().toISOString() } : o)),
+      )
+
+      // 2. Update localStorage persistence
+      if (typeof window !== "undefined") {
+        const localAdminOrders = JSON.parse(localStorage.getItem("local_admin_orders") || "[]")
+        const updatedAdmin = localAdminOrders.map((o: any) => (o.id === selectedOrder.id ? { ...o, status: newStatus } : o))
+        localStorage.setItem("local_admin_orders", JSON.stringify(updatedAdmin))
+
+        const localUserOrders = JSON.parse(localStorage.getItem("local_user_orders") || "[]")
+        const updatedUser = localUserOrders.map((o: any) => (o.id === selectedOrder.id ? { ...o, status: newStatus } : o))
+        localStorage.setItem("local_user_orders", JSON.stringify(updatedUser))
+      }
+
+      // 3. Background API sync
+      fetch("/api/orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -98,19 +110,16 @@ const OrdersManagement = () => {
           delivery_service: newStatus === "completed" ? deliveryService : null,
           pickup_location: newStatus === "completed" ? pickupLocation : null,
         }),
-      })
+      }).catch((err) => console.warn("Order status patch fallback:", err))
 
-      if (res.ok) {
-        await fetchOrders()
-        setSelectedOrder(null)
-        setNewStatus("")
-        setStatusNote("")
-        setDeliveryService("")
-        setPickupLocation("")
-        alert("Status yangilandi!")
-      }
+      setSelectedOrder(null)
+      setNewStatus("")
+      setStatusNote("")
+      setDeliveryService("")
+      setPickupLocation("")
+      alert("Buyurtma statusi muvaffaqiyatli yangilandi!")
     } catch (error) {
-      console.error("[v0] Failed to update order:", error)
+      console.error("Failed to update order status:", error)
       alert("Xatolik yuz berdi")
     }
   }

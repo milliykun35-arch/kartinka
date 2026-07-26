@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useLanguage } from "@/lib/language-context"
+import { sendTelegramOrderNotification } from "@/lib/telegram"
 import { ShoppingCart, Trash2, Plus, Minus, Truck, Store, Phone, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -163,6 +164,23 @@ export function CartClient() {
         customer_name: orderForm.name.trim(),
         customer_phone: orderForm.phone.trim(),
         total_amount: finalTotal,
+        price: itemsForOrder[0]?.price || 0,
+        quantity: itemsForOrder[0]?.quantity || 1,
+        product_name: itemsForOrder[0]?.name || "Devoriy rasm",
+        status: "pending",
+        payment_method: "call",
+        items: itemsForOrder,
+        created_at: new Date().toISOString(),
+      }
+
+      // Also trigger Telegram notification directly from client
+      sendTelegramOrderNotification({
+        orderNumber,
+        customerName: orderForm.name.trim(),
+        customerPhone: orderForm.phone.trim(),
+        totalAmount: finalTotal,
+        items: itemsForOrder,
+      }).catch((err) => console.warn("Client telegram notify:", err))
         price: itemsForOrder[0]?.price || 0,
         quantity: itemsForOrder[0]?.quantity || 1,
         product_name: itemsForOrder[0]?.name || "Devoriy rasm",

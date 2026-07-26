@@ -1,5 +1,6 @@
 import { createServerClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
+import { sendTelegramOrderNotification } from "@/lib/telegram"
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,16 @@ export async function POST(request: Request) {
     const firstItem = items[0] || {}
 
     const finalOrderNumber = body.orderNumber || body.order_number || `ORD-${Date.now()}`
+
+    // Trigger Telegram Notification to Admin
+    sendTelegramOrderNotification({
+      orderNumber: finalOrderNumber,
+      customerName,
+      customerPhone,
+      customerAddress,
+      totalAmount: body.totalAmount || body.total_amount || 0,
+      items: items.length > 0 ? items : [firstItem],
+    }).catch((err) => console.warn("Telegram notification bg error:", err))
 
     const orderData = {
       id: `ord-${Date.now()}`,
