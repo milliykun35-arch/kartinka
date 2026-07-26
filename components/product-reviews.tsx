@@ -121,14 +121,6 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
         }
       }
 
-      const res = await fetch("/api/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId,
-          userName,
-          rating,
-          comment,
       const newReview = {
         id: `rev-${Date.now()}`,
         product_id: productId,
